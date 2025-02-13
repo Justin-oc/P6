@@ -1,6 +1,8 @@
 const Book = require('../models/book');
 const fs = require('fs');
 
+const mongoose = require('mongoose');
+
 exports.createBook = (req, res, next) => {
   const bookObject = JSON.parse(req.body.book);
   delete bookObject._id;
@@ -68,3 +70,45 @@ exports.getAllBooks = (req, res, next) => {
       .then(books => res.status(200).json(books))
       .catch(error => res.status(400).json({ error }));
   };
+
+exports.getBestRating = (req, res, next) => {
+    Book.find()
+      .sort({ averageRating: -1 }) // tri décroissant
+      .limit(3) // les 3 premiers livres les mieux notés
+      .then((books) => {
+        res.status(200).json(books);
+      })
+      .catch(error => {
+        res.status(400).json({ error });
+      });
+};
+
+exports.addRating = (req, res, next) => {
+
+  const bookId = req.params.id; // récupération des données envoyée dans la requête
+  const userId = req.auth.userId;
+  const grade = req.body.rating;
+
+  if (!grade || grade < 0 || grade > 5) {
+    return res.status(400).json({ message: 'La note doit être entre 0 et 5.' }); // vérification de la note
+  }
+
+  Book.findOne({ _id: bookId }) // recherche du livre par id
+    .then(book => {
+
+      book.ratings.push({ userId, grade });
+
+      const totalRatings = book.ratings.length; // calcul de la nouvelle note moyenne
+      const sumRatings = book.ratings.reduce((sum, rating) => sum + rating.grade, 0); // reduce additionne toutes les notes existantes
+      book.averageRating = parseFloat((sumRatings / totalRatings).toFixed(1)); // arrondi à 1 chiffre après la virgule
+
+      book.save() // sauvegarde du livre mis à jour
+        .then(() => res.status(201).json(book))
+        .catch(error => { res.status(400).json({ error }) })
+    })
+    .catch(error => {
+      console.error('DEBUG Error:', error);
+      res.status(500).json({ error });
+    });
+
+}
